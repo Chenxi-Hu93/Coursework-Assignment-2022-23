@@ -781,6 +781,169 @@ The provided code will output two plots:
 
 - The Monte Carlo error plot, which shows the error between the neural network-based approximation and the Monte Carlo solution at regular intervals during the training process.
 
+## Part 4: Policy iteration with DGM<a name="part-4-policy-iteration-with-dgm"></a>
+In this section, we aim to combine the policy iteration/improvement algorithm (PIA) with the Deep Galerkin Method (DGM). The value function $v$ and the Markov controls $a$ are approximated by neural networks with parameters $\theta_{val}$ and $\theta_{act}$, respectively. The policy algorithm proceeds in the following steps:
+
+   - Given a Markov control function $a$ approximated by $a(\cdot, \cdot; \theta_{act})$, we need to solve the linear PDE:
+  
+$$\begin{align}
+& \partial_t u + \frac{1}{2} \mathrm{tr}(\sigma\sigma^{\top}\partial_{xx}u) + (\partial_x u)^{\top} Hx + (\partial_x u)^{\top} M a + x^{\top} C x + a^{\top} D a = 0 \text{ on } [0, T) \times \mathbb{R}^2, \
+& u(T, x) = x^{\top} R x \text{ on } \mathbb{R}^2.
+\end{align}$$
+
+We adapt Exercise 3.1 by replacing the constant $\alpha$ with the output of $a(\cdot, \cdot; \theta_{act})$. This step updates $\theta_{val}$.
+
+   - With $\theta_{val}$ fixed, we update $\theta_{act}$ to minimize the Hamiltonian:
+        $$H(\theta_{act}) = \frac{1}{N_{\mathrm{batch}}} \sum_{i=1}^{N_{\mathrm{batch}}} \left[(\partial_x v(t^{(i)}, x^{(i)}; \theta_{val}))^{\top} H x^{(i)} + (\partial_x v(t^{(i)}, x^{(i)}; \theta_{val}))^{\top} M a(t^{(i)}, x^{(i)}; \theta_{act}) + {x^{(i)}}^{\top} C x^{(i)} + a(t^{(i)}, x^{(i)}; \theta_{act})^{\top} D a(t^{(i)}, x^{(i)}; \theta_{act}) \right].$$
+    In this step, we minimize the Hamiltonian without explicitly aiming for mean-square-error minimization.
+    
+Our goal is to implement this combined algorithm and analyze its performance for solving the given problem.
+
+```python
+# Neural network
+dim_x = 2
+dim_S = 100
+sizes = [3, 100, 100, 2]  # input_dim=3 (t, x1, x2), output_dim=2
+net_act = FFN(sizes).double()
+net_val = Net_DGM(dim_x, dim_S).double()
+
+T = 1
+batch_size = 200
+t_4_batch  = (torch.rand(batch_size, requires_grad=True) * T).double()
+x_4_batch= (torch.rand(batch_size,2, requires_grad=True)).double()
+tx_batch = torch.cat((t_4_batch.unsqueeze(1), x_4_batch), dim=1)
+
+
+optimizer_val = torch.optim.Adam(net_val.parameters(), lr=0.001)
+optimizer_act = torch.optim.Adam(net_act.parameters(), lr=0.00001)
+
+scheduler_val = torch.optim.lr_scheduler.MultiStepLR(optimizer_val, milestones = (200,),gamma=0.1)
+scheduler_act = torch.optim.lr_scheduler.MultiStepLR(optimizer_act, milestones = (200,),gamma=0.1)
+
+
+loss_fn = nn.MSELoss()
+
+max_iterations = 100
+
+policy_iterations = 10
+val_losses = []
+act_losses = []
+
+# Policy iteration
+for policy_iter in range(policy_iterations):
+    # i) Update the value function (theta_val)
+    for it in range(max_iterations):
+        optimizer_val.zero_grad()
+        
+        a_act =  net_act(tx_batch)
+    
+        u_of_tx = net_val(t_4_batch.unsqueeze(1), x_4_batch)
+        grad_u_x = get_gradient(u_of_tx,x_4_batch)
+        grad_u_t = get_gradient(u_of_tx,t_4_batch)
+        grad_u_xx = get_hess(grad_u_x, x_4_batch)
+    
+        trace = torch.matmul(sigma.view(1, 2, 1).double(), sigma.view(1, 1, 2).double()) @ grad_u_xx.double()
+        target_functional = torch.zeros_like(u_of_tx)
+
+        pde = grad_u_t+ 0.5 * ((trace[:,0,0]) + (trace[:,1,1])) + (grad_u_x.unsqueeze(1) @ H @ x_4_batch.unsqueeze(2))[:,0,0] + (grad_u_x.unsqueeze(1) @ M @ a_act.unsqueeze(2))[:,0,0] + ((x_4_batch).unsqueeze(1) @ (C @ x_4_batch.unsqueeze(2)))[:,0,0] + (a_act.unsqueeze(1) @ D @ a_act.unsqueeze(2 ))[:,0,0]
+
+        MSE_functional = loss_fn(torch.reshape(pde,(batch_size,1)), target_functional)
+    
+
+    # Compute the terminal condition residual       
+    
+        x_batch_terminal = x_4_batch#(torch.rand(batch_size, 2, requires_grad=True)
+        t_batch_terminal =(torch.ones(batch_size) * T).double()
+        u_of_Tx = net_val(t_batch_terminal.unsqueeze(1), x_batch_terminal)
+        target_terminal = x_batch_terminal.unsqueeze(1) @ R @ x_batch_terminal.unsqueeze(2)
+ 
+        MSE_terminal = loss_fn(u_of_Tx, target_terminal[:,:,0])
+    # Compute total loss
+        loss = MSE_functional + MSE_terminal
+        loss.backward(retain_graph=True)
+
+    # Backpropagation and optimization
+        optimizer_val.step()
+        scheduler_val.step()
+        val_losses.append(loss.item())
+        
+    # ii) Update the control function (theta_act)
+    for it in range(max_iterations):
+        optimizer_act.zero_grad()
+        a_act =  net_act(tx_batch)
+        u_of_tx = net_val(t_4_batch.unsqueeze(1), x_4_batch)
+        grad_u_x = get_gradient(u_of_tx,x_4_batch)
+        grad_u_t = get_gradient(u_of_tx,t_4_batch)
+        grad_u_xx = get_hess(grad_u_x, x_4_batch)
+        
+
+        Hami = (grad_u_x.unsqueeze(1) @ H @ x_4_batch.unsqueeze(2))[:,0,0] + (grad_u_x.unsqueeze(1) @ M @ a_act.unsqueeze(2))[:,0,0] + (x_4_batch.unsqueeze(1) @ C @ x_4_batch.unsqueeze(2))[:,0,0] + (a_act.unsqueeze(1) @ D @ a_act.unsqueeze(2))[:,0,0]
+
+        Hamiltonian = (torch.mean(Hami,dim=0 ))
+    
+
+    # Compute the terminal condition residual       
+    
+    # Compute total loss
+        loss1 = Hamiltonian
+        loss1.backward(retain_graph=True)
+
+    # Backpropagation and optimization
+    
+        optimizer_act.step()
+        scheduler_act.step()
+        act_losses.append(loss1.item())
+
+plt.plot(val_losses)
+plt.xlabel('Iteration')
+plt.ylabel('Loss')
+plt.title('Value Function Training Loss')
+plt.show()
+
+plt.plot(act_losses)
+plt.xlabel('Iteration')
+plt.ylabel('Loss')
+plt.title('Control Function Training Loss')
+plt.show()
+```
+This code implements a neural network-based policy iteration algorithm for solving optimal control problems. The algorithm updates value and control functions using deep learning techniques, specifically using a feed-forward neural network (FFN) for the control function and a deep Galerkin method (DGM) for the value function. The problem is solved iteratively, minimizing the residual of the value and control functions in each iteration.
+
+**Setup**
+
+The code considers a continuous-time control problem with the following characteristics:
+State dimension: 2
+Control dimension: 2
+Time horizon: T = 1
+
+**Neural Networks**
+
+Control Function (FFN):
+- Input dimensions: 3 (t, x1, x2)
+- Output dimensions: 2 (control actions)
+- Network architecture: [3, 100, 100, 2]
+
+Value Function (DGM):
+- State dimension: 2
+- Space dimension: 100
+
+**Training**
+
+The training process includes the following parameters:
+- Batch size: 200
+- Learning rate for value function: 0.001
+- Learning rate for control function: 0.00001
+- Scheduler milestones: (200,)
+- Scheduler gamma: 0.1
+- Maximum iterations: 100
+- Policy iterations: 10
+- Loss function: Mean squared error (MSE)
+
+**Results**
+
+The code outputs two plots, illustrating the training loss for both the value function and the control function. These plots display the decreasing trend of the loss during the training process, indicating that the neural networks are learning and improving their predictions.
+
+To run the code, simply execute the provided script. The training process will start, and the resulting plots will be displayed upon completion.
+
 ## References<a name="references"></a>
 - M. Sabate-Vidales, Deep-PDE-Solvers, Github project,https://github.com/msabvid/Deep-PDE-Solvers, 2021.
 - C. Jiang, Deep Galerkin Method, Github project, https://github.com/EurasianEagleOwl/DeepGalerkinMethod, 2022.
