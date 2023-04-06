@@ -30,6 +30,22 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 
 ```
+The given code snippet imports several libraries in Python that are commonly used for numerical computations, neural networks, and data visualization. Here's a brief description of each imported library and its purpose:
+
+- `import numpy as np`: This line imports the NumPy library, which is a popular library for numerical operations, such as array manipulation, linear algebra, and mathematical functions. It is aliased as np for convenience.
+
+- `from numpy.linalg import inv`: This line imports the inv function from the numpy.linalg submodule, which is used to compute the inverse of a square matrix.
+
+- `from scipy.integrate import odeint`: This line imports the odeint function from the scipy.integrate module. The odeint function is used for solving ordinary differential equations (ODEs) using numerical integration techniques.
+
+- `import torch`: This line imports the PyTorch library, a popular deep learning framework that provides powerful tools for constructing, training, and evaluating neural networks.
+
+- `import torch.nn as nn`: This line imports the torch.nn module and aliases it as nn. The torch.nn module contains various classes and functions for creating neural networks, such as layers, activation functions, and loss functions.
+
+- `import torch.optim as optim`: This line imports the torch.optim module and aliases it as optim. The torch.optim module provides optimization algorithms for training neural networks, such as gradient descent, Adam, and RMSprop.
+
+- `import matplotlib.pyplot as plt`: This line imports the pyplot module from the Matplotlib library and aliases it as plt. The pyplot module is a popular data visualization library used for creating plots and charts to analyze and visualize data.
+
 
 ## Part 1: Linear quadratic regulator<a name="part-1-linear-quadratic-regulator"></a>
 We examine the following stochastic differential equation (SDE) for the state process $(X_s)_{s\in[t,T]}$:
