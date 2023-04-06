@@ -238,6 +238,7 @@ plt.ylabel('Error', fontsize=14)
 This code is related to Exercise 1.2 of the Optimal Control course. This code calculates the mean squared error of a Monte Carlo simulation used to solve a financial problem. The problem involves solving a Riccati differential equation, and the code simulates a number of paths of the underlying asset price to obtain an estimate of the value function. The error of the simulation is calculated for different numbers of time steps.
 
 **Usage**
+
 To use this code, simply run the mse function with the appropriate input values. The function takes two PyTorch tensors, x and y, and returns the mean squared error between them.
 
 The main part of the code involves varying the number of time steps and calculating the error of the Monte Carlo simulation for each number of steps. The simulation involves solving a Riccati differential equation and simulating a number of paths of the underlying asset price. The error of the simulation is then calculated and plotted against the number of time steps.
@@ -636,7 +637,7 @@ To use the code, simply call the `MC_results` function with the desired argument
 
 Note that this code requires the PyTorch library to be installed.
 ```python
-    def get_gradient(output, x):
+def get_gradient(output, x):
     grad = torch.autograd.grad(output, x, grad_outputs=torch.ones_like(output), create_graph=True, retain_graph=True, only_inputs=True)[0]
     return grad
 
@@ -753,25 +754,24 @@ To run the provided code for Exercise 3.1, follow these steps:
 
 The provided code sets up a neural network architecture and performs the following steps:
 
-Initialize the neural network with the given dimensions and create an optimizer and learning rate scheduler.
+- Initialize the neural network with the given dimensions and create an optimizer and learning rate scheduler.
 
-Generate random points from the problem domain as training data.
+- Generate random points from the problem domain as training data.
 
-Calculate the Monte Carlo solution for the given problem by adapting the method from Exercise 1.2.
+- Calculate the Monte Carlo solution for the given problem by adapting the method from Exercise 1.2.
 
-Perform the training process for a specified number of iterations (`max_updates`). In each iteration:
+- Perform the training process for a specified number of iterations (`max_updates`). In each iteration:
 
-- Calculate the gradients of the neural network output with respect to the input variables (`x` and `t`) and the second-order gradients (Hessian) of the output with respect to `x`.
+    - Calculate the gradients of the neural network output with respect to the input variables (`x` and `t`) and the second-order gradients (Hessian) of the output with respect to `x`.
+ 
+    - Compute the PDE residual using the given formula and calculate the mean squared error (MSE) between the computed residual and the target functional (zero in this case).
+    - Compute the terminal condition residual and its MSE with respect to the target terminal condition.
 
-- Compute the PDE residual using the given formula and calculate the mean squared error (MSE) between the computed residual and the target functional (zero in this case).
+    - Add the two MSEs to get the total loss, perform backpropagation, and update the neural network weights.
 
-- Compute the terminal condition residual and its MSE with respect to the target terminal condition.
+- Calculate the error between the neural network-based solution and the Monte Carlo solution at regular intervals during the training process and store the errors in the `error_history` list.
 
-- Add the two MSEs to get the total loss, perform backpropagation, and update the neural network weights.
-
-Calculate the error between the neural network-based solution and the Monte Carlo solution at regular intervals during the training process and store the errors in the `error_history` list.
-
-Plot the training loss and the Monte Carlo error as a function of the iteration number.
+- Plot the training loss and the Monte Carlo error as a function of the iteration number.
 
 **Results**
 
