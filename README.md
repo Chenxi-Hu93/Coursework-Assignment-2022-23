@@ -193,8 +193,75 @@ The input arguments are:
 
 ### Exercise 1.2<a name="exercise-12"></a>
 ```python
-import time
-start = time.time()
+def mse(x, y):
+    return torch.mean((x - y)**2)
+# Vary number of time steps
+num_samples =100000
+num_steps = [1, 10, 50, 100, 500,1000,5000]#[100]
+
+batch_size = 50
+#t= torch.tensor([1,0.5,0.25], dtype=torch.float32)
+#x =torch.tensor([[[1., 1.]],[[2., 3.]],[[1., 0.]]], dtype=torch.float32)
+x =  torch.rand(batch_size,1, 2,dtype=torch.float64)
+t=  torch.rand(batch_size,dtype=torch.float64)
+T=1
+
+errors = [] 
+v_true = result.value(t,x)
+v_true = torch.reshape(v_true,(1,-1))
+for N in num_steps:
+    end_time = torch.ones(batch_size, dtype=torch.float64) * T
+    time_grid = torch.linspace(0, 1, N+1).unsqueeze(0).repeat(batch_size, 1)
+    time_grid = t.view(-1, 1) + (end_time - t).view(-1, 1) * time_grid
+    S_batch = torch.empty((batch_size, N+1, 2, 2),dtype=torch.float64)
+    for i in range(batch_size):
+        S_batch[i] = result.solve_riccati(time_grid[i])
+    X =torch.reshape(x.repeat(num_samples, 1, 1),(num_samples,batch_size ,2, 1))#num_samples,batch_size,num_steps+1,2,1
+    tau=(T-t)/N
+    v_temp = 0
+    X_new = 0
+    for n in range(0, N):
+        a  = -torch.inverse(D) @ M.T @ S_batch[:,n,:,:] @ X
+        X_new =  X + (H @ X + M @ a )*(tau.unsqueeze(0).unsqueeze(-1).unsqueeze(-1)) + torch.reshape(torch.transpose(sigma*torch.reshape(torch.randn(num_samples,batch_size) *  torch.sqrt(tau),(1,num_samples*batch_size)),0,1),(num_samples,batch_size,2,1))
+        v_temp +=( torch.transpose(X,2,3)@ (C @X)+torch.transpose(a,2,3) @ (D @ a)) *(tau.unsqueeze(0).unsqueeze(-1).unsqueeze(-1))
+        X = X_new
+    v_temp += torch.transpose(X,2,3)@ (R @X)
+    MC_results = torch.mean(v_temp, dim=0)
+    errors.append(mse(torch.reshape(MC_results,(1,batch_size)), v_true))
+log_num_samples_list = np.log(num_steps)
+log_errors = np.log(errors)
+plt.plot(log_num_samples_list, log_errors, marker='o',linestyle='-')
+plt.xlim([-1, 10])
+plt.xlabel('Number of Steps', fontsize=14)
+plt.ylabel('Error', fontsize=14)
+```
+This code is related to Exercise 1.2 of the Optimal Control course. This code calculates the mean squared error of a Monte Carlo simulation used to solve a financial problem. The problem involves solving a Riccati differential equation, and the code simulates a number of paths of the underlying asset price to obtain an estimate of the value function. The error of the simulation is calculated for different numbers of time steps.
+
+**Usage**
+To use this code, simply run the mse function with the appropriate input values. The function takes two PyTorch tensors, x and y, and returns the mean squared error between them.
+
+The main part of the code involves varying the number of time steps and calculating the error of the Monte Carlo simulation for each number of steps. The simulation involves solving a Riccati differential equation and simulating a number of paths of the underlying asset price. The error of the simulation is then calculated and plotted against the number of time steps.
+
+The code follows the following steps:
+
+- Define a mean-square error function, `mse(x, y)`, that calculates the mean of the squared difference between two tensors `x` and `y`.
+- Define the number of samples and number of time steps to use in the simulation. The number of time steps varies from a single step to 5000 steps.
+- Define the size of the batch of random inputs to use in the simulation. Each input in the batch is a vector of length 2.
+- Define the time grid for the simulation as a tensor of size `batch_size x (N+1)`, where `N` is the number of time steps. Each row of the tensor corresponds to a different input in the batch and represents the time grid for that input.
+- For each input in the batch, solve the Riccati differential equation using the `solve_riccati` method of an LQRResult object called result. The result is stored in a tensor of size `batch_size x (N+1) x 2 x 2`.
+- Initialize the state variable X as a tensor of size `num_samples x batch_size x 2 x 1`. This represents the current state of the system for each sample and input in the batch.
+- Define the time step size `tau` as the difference between the final time `T` and the initial time t divided by the number of time steps `N`.
+- For each time step n, calculate the control input a using the current state X and the Riccati solution `S_batch[:,n,:,:]`. Then update the state variable `X` using the control input and a Gaussian noise term.
+- Calculate the final cost using the updated state variable `X` and the terminal cost matrix `R`.
+- Calculate the Monte Carlo estimate of the optimal value function by averaging the final costs over all samples.
+- Calculate the mean-squared error between the Monte Carlo estimate and the true value function for the given inputs.
+- Plot the error as a function of the number of time steps used in the simulation.
+
+**Result**
+
+The code generates a plot that shows the error as a function of the number of time steps used in the simulation. The plot shows that the error decreases as the number of time steps increases, which is expected.
+
+```python
 def mse(x, y):
     return torch.mean((x - y)**2)
 # Vary number of time steps
@@ -224,27 +291,26 @@ for num_samples in num_samples_list:
         X = X_new
     v_temp += torch.transpose(X,2,3)@ (R @X)
     MC_results = torch.mean(v_temp, dim=0)
-    errors.append(mse(MC_results, v_true))
-end = time.time()
+    errors.append(mse(torch.reshape(MC_results,(1,batch_size)), v_true))
+log_num_samples_list = np.log(num_samples_list)
+log_errors = np.log(errors)
+plt.plot(log_num_samples_list, log_errors, marker='o',linestyle='-')
+plt.xlim([2, 12])
+plt.xlabel('Number of Monte Carlo samples', fontsize=14)
+plt.ylabel('Error', fontsize=14)
+plt.show()
 ```
-This code is related to Exercise 1.2 of the Optimal Control course. The objective is to investigate the effect of the number of time steps and the number of Monte Carlo samples on the error between the simulated value function and the optimal value function.
-
-The code imports the time module and defines a function mse(x, y) that computes the mean squared error between tensors x and y.
 
 **Usage**
 
-- Initializes a list `num_samples_list` with the different number of Monte Carlo samples to be used in the simulation.
-- Sets the variable `N` to 5000, `batch_size` to 50, x to a 3D tensor of size `(batch_size,1,2)` with random values, and t to a 2D tensor of size (`batch_size`,) with random values.
-- Initializes an empty list `errors` to store the mean squared errors for each number of time steps. The function `result.value(t,x)` returns the optimal value function, which is stored in `v_true`.
-- Loops over each number of Monte Carlo samples in `num_samples_list`. For each value, it computes the end_time and creates a time grid using torch.linspace. It then computes the Riccati equation solution for each time in the time grid using the function `result.solve_riccati`.
-- Initializes the value function approximation by defining `X` as a 3D tensor of size `(num_samples, batch_size, 2, 1)` and `tau` as the time step size. Loops over each time step and updates the approximation using the explicit time discretization scheme given in Exercise 1.1. At each step, it computes the optimal control `a`, updates `X` using the approximation formula, and adds the corresponding value function approximation to `v_temp`.
-- Computes the mean value function approximation using `torch.mean` and stores the mean squared error between the approximation and the optimal value function in `errors`. The code also records the total time taken to run the simulation.
+To use this code, simply run the Python script. The simulation parameters can be adjusted by changing the values of `num_samples_list`, `N`, `batch_size`, `x`, and `t`. The resulting plot shows the mean squared error between the true value of the solution and the estimated value of the solution for each value of `num_samples`.
+
+The code defines a function `mse(x, y)` that calculates the mean squared error between two tensors `x` and y. The simulation is run for each value of `num_samples` in `num_samples_list`. The simulation uses the `solve_riccati` function from the result module to solve the Riccati equation, and the resulting solution is used to simulate the control problem using Monte Carlo methods. The estimated value of the objective function is calculated using the mean of the temporary value of the objective function over all Monte Carlo samples. The mean squared error between the estimated value and the true value is then calculated and plotted against the number of Monte Carlo samples using a log-log plot.
 
 **Result**
 
-The results of the simulation are stored in the `errors` list, which represents the mean squared errors for each number of Monte Carlo samples in `num_samples_list`. The total time taken to run the simulation is also recorded. 
+The resulting plot shows how the error decreases as the number of Monte Carlo samples increases. It can be used to determine the number of Monte Carlo samples needed to achieve a desired level of accuracy in the simulation.
 
-Finally, the code generates a plot of the error as a function of the number of Monte Carlo samples using matplotlib. The plot is displayed using the `show()` function.
 
 ## Part 2: Supervised learning, checking the NNs are good enough<a name="part-2-supervised-learning-checking-the-nns-are-good-enough"></a>
 In part 2, a neural network is defined as a parametric function that depends on an input, denoted as $x \in \mathbb{R}^d$, and parameters, denoted as $\theta \in \mathbb{R}^p$, taking values in $\mathbb{R}^{d'}$. We write this function as:
@@ -351,7 +417,7 @@ This repository contains the implementation of a Deep Galerkin Method (DGM) for 
 
 To use this code, first create an instance of the Net_DGM class by specifying the input and output dimensions of the DGM, as well as the activation function to be used in the neural networks. Then, train the DGM on a set of input/output pairs using a suitable optimization algorithm, such as stochastic gradient descent (SGD).
 
-Once the DGM is trained, it can be used to predict the solution of the PDE at a given point in time and space by calling the forward method of the Net_DGM instance, passing in the time and space coordinates as inputs.
+Once the DGM is trained, it can be used to predict the solution of the PDE at a given point in time and space by calling the forward method of the `Net_DGM` instance, passing in the time and space coordinates as inputs.
 
 ```python
 # Generate training data
@@ -392,7 +458,7 @@ plt.show()
 
 This code generates training data and trains a neural network using the Deep Galerkin Method to solve a partial differential equation.
 
-The code generates random training data with N_data data points and applies the DGM neural network to fit a function defined by the result.value function. The neural network is defined by the Net_DGM class and uses three DGM_Layer classes to perform the approximation. The optimizer is set up using the optim.Adam function with a learning rate of 0.0001, and a MultiStepLR scheduler is used to decay the learning rate. The loss function used is the mean squared error loss, defined by nn.MSELoss.
+The code generates random training data with N_data data points and applies the DGM neural network to fit a function defined by the result.value function. The neural network is defined by the `Net_DGM` class and uses three `DGM_Layer` classes to perform the approximation. The optimizer is set up using the `optim.Adam` function with a learning rate of 0.0001, and a MultiStepLR scheduler is used to decay the learning rate. The loss function used is the mean squared error loss, defined by `nn.MSELoss`.
 
 The training loop is defined by num_epochs and the loss function is minimized using backpropagation. The loss at each epoch is recorded and the training loss is plotted using matplotlib.
 
@@ -428,9 +494,9 @@ class FFN(nn.Module):
     def forward(self, x):
         return self.net(x)
 ```
-This code defines a PyTorch nn.Module called FFN that represents a feed-forward neural network. The module constructor takes in an array sizes that specifies the number of neurons in each layer of the network. Additionally, the module can be initialized with an activation function and an output_activation function, both defaulting to nn.ReLU and nn.Identity, respectively. Finally, there is an optional flag batch_norm that when set to True adds batch normalization layers between the input and each hidden layer.
+This code defines a PyTorch nn.Module called `FFN` that represents a feed-forward neural network. The module constructor takes in an array sizes that specifies the number of neurons in each layer of the network. Additionally, the module can be initialized with an activation function and an `output_activation` function, both defaulting to nn.ReLU and nn.Identity, respectively. Finally, there is an optional flag `batch_norm` that when set to True adds batch normalization layers between the input and each hidden layer.
 
-The forward method of the module takes in a tensor x as input and applies the neural network to it. The freeze and unfreeze methods set all or no parameters in the network to require gradients during training, respectively.
+The forward method of the module takes in a tensor `x` as input and applies the neural network to it. The freeze and unfreeze methods set all or no parameters in the network to require gradients during training, respectively.
 
 This module is provided to facilitate the construction of feed-forward neural networks in PyTorch.
 
@@ -488,13 +554,13 @@ plt.xlabel("Epoch")
 plt.ylabel("Loss")
 plt.show()
 ```
-This code provides an implementation of a linear-quadratic regulator (LQR) controller using neural networks. The LQR controller is designed to control a linear time-invariant system with state space representation, given by the matrices H, M, C, and D. The neural network is trained using a dataset of inputs and outputs generated by the LQR controller.
+This code provides an implementation of a linear-quadratic regulator (LQR) controller using neural networks. The LQR controller is designed to control a linear time-invariant system with state space representation, given by the matrices `H`, `M`, `C`, and `D`. The neural network is trained using a dataset of inputs and outputs generated by the LQR controller.
 
 **Usage**
 
-1. Create an instance of the LQR controller by providing the matrices H, M, C, D, R, T, and sigma.
-2. Generate training data by randomly sampling N_data time and state pairs, and computing the LQR control action for each pair using the lqr.control function.
-3. Create a neural network using the FFN class, with the desired architecture and activation functions.
+1. Create an instance of the LQR controller by providing the matrices `H`, `M`, `C`, `D`, `R`, `T`, and `sigma`.
+2. Generate training data by randomly sampling `N_data` time and state pairs, and computing the LQR control action for each pair using the lqr.control function.
+3. Create a neural network using the `FFN` class, with the desired architecture and activation functions.
 4. Set up the optimizer and loss function.
 5. Train the neural network using the generated training data, optimizing for the MSE loss.
 6. Plot the training loss.
@@ -557,7 +623,7 @@ def MC_results(x, t, num_samples, num_steps, num_loops, T):
     return v_MC
  ```
  
-This Python code calculates Monte Carlo results for a given set of parameters. The MC_results function takes in the following arguments:
+This Python code calculates Monte Carlo results for a given set of parameters. The `MC_results` function takes in the following arguments:
 - `x`: the initial state of the system
 - `t`: a tensor containing the start time of the simulation
 - `num_samples`: the total number of samples to generate
@@ -566,7 +632,7 @@ This Python code calculates Monte Carlo results for a given set of parameters. T
 - `T`: the end time of the simulation
 The function then calculates the Monte Carlo results by iterating through the provided number of steps, generating batches of samples, and concatenating the results. Finally, the function returns the mean of the overall results.
 
-To use the code, simply call the MC_results function with the desired arguments. Make sure to import the necessary libraries and ensure that the inputs are of the correct data types.
+To use the code, simply call the `MC_results` function with the desired arguments. Make sure to import the necessary libraries and ensure that the inputs are of the correct data types.
 
 Note that this code requires the PyTorch library to be installed.
 ```python
@@ -671,35 +737,8 @@ plt.title('Monte Carlo')
 plt.show()
     return hess
 ```
-This exercise involves implementing the Deep Galerkin Method (DGM) for the given linear partial differential equation (PDE) and comparing the neural network-based approximation of the solution against the Monte Carlo solution at regular intervals during the training.
 
-**Problem Description**
-
-The goal is to approximate the solution of the PDE using a neural network and the Deep Galerkin Method.
-
-**Implementation**
-
-The provided code sets up a neural network architecture and performs the following steps:
-
-Initialize the neural network with the given dimensions and create an optimizer and learning rate scheduler.
-
-Generate random points from the problem domain as training data.
-
-Calculate the Monte Carlo solution for the given problem by adapting the method from Exercise 1.2.
-
-Perform the training process for a specified number of iterations (max_updates). In each iteration:
-
-- Calculate the gradients of the neural network output with respect to the input variables (x and t) and the second-order gradients (Hessian) of the output with respect to x.
-
-- Compute the PDE residual using the given formula and calculate the mean squared error (MSE) between the computed residual and the target functional (zero in this case).
-
-- Compute the terminal condition residual and its MSE with respect to the target terminal condition.
-
-- Add the two MSEs to get the total loss, perform backpropagation, and update the neural network weights.
-
-Calculate the error between the neural network-based solution and the Monte Carlo solution at regular intervals during the training process and store the errors in the error_history list.
-
-Plot the training loss and the Monte Carlo error as a function of the iteration number.
+This exercise involves implementing the Deep Galerkin Method (DGM) for the given linear partial differential equation (PDE) and comparing the neural network-based approximation of the solution against the Monte Carlo solution at regular intervals during the training. The goal is to approximate the solution of the PDE using a neural network and the Deep Galerkin Method.
 
 **Usage**
 
@@ -711,6 +750,28 @@ To run the provided code for Exercise 3.1, follow these steps:
 - Run the script or notebook, and observe the training loss and Monte Carlo error plots.
 
 - (Optional) Modify the neural network architecture, optimizer settings, or other parameters to improve the performance or experiment with different configurations.
+
+The provided code sets up a neural network architecture and performs the following steps:
+
+Initialize the neural network with the given dimensions and create an optimizer and learning rate scheduler.
+
+Generate random points from the problem domain as training data.
+
+Calculate the Monte Carlo solution for the given problem by adapting the method from Exercise 1.2.
+
+Perform the training process for a specified number of iterations (`max_updates`). In each iteration:
+
+- Calculate the gradients of the neural network output with respect to the input variables (`x` and `t`) and the second-order gradients (Hessian) of the output with respect to `x`.
+
+- Compute the PDE residual using the given formula and calculate the mean squared error (MSE) between the computed residual and the target functional (zero in this case).
+
+- Compute the terminal condition residual and its MSE with respect to the target terminal condition.
+
+- Add the two MSEs to get the total loss, perform backpropagation, and update the neural network weights.
+
+Calculate the error between the neural network-based solution and the Monte Carlo solution at regular intervals during the training process and store the errors in the `error_history` list.
+
+Plot the training loss and the Monte Carlo error as a function of the iteration number.
 
 **Results**
 
