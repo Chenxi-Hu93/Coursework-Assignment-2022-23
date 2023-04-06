@@ -192,7 +192,59 @@ The input arguments are:
 - `space (torch.Tensor)`: a 3D tensor of shape (batch_size, N, 2) containing the spatial coordinates.
 
 ### Exercise 1.2<a name="exercise-12"></a>
+```python
+import time
+start = time.time()
+def mse(x, y):
+    return torch.mean((x - y)**2)
+# Vary number of time steps
+num_samples_list =[10, 50,100,5*10**2,10**3, 5*10**3, 10**4, 5*10**4, 10**5]
+N =5000
+batch_size = 50
+x =  torch.rand(batch_size,1, 2,dtype=torch.float64)
+t=  torch.rand(batch_size,dtype=torch.float64)
+errors = [] 
+v_true = result.value(t,x)
+v_true = torch.reshape(v_true,(1,-1))
+for num_samples in num_samples_list:
+    end_time = torch.ones(batch_size, dtype=torch.float64) * T
+    time_grid = torch.linspace(0, 1, N+1).unsqueeze(0).repeat(batch_size, 1)
+    time_grid = t.view(-1, 1) + (end_time - t).view(-1, 1) * time_grid
+    S_batch = torch.empty((batch_size, N+1, 2, 2),dtype=torch.float64)
+    for i in range(batch_size):
+        S_batch[i] = result.solve_riccati(time_grid[i])
+    X =torch.reshape(x.repeat(num_samples, 1, 1),(num_samples,batch_size ,2, 1))#num_samples,batch_size,num_steps+1,2,1
+    tau=(T-t)/N
+    v_temp = 0
+    X_new = 0
+    for n in range(0, N):
+        a  = -torch.inverse(D) @ M.T @ S_batch[:,n,:,:] @ X
+        X_new =  X + (H @ X + M @ a )*(tau.unsqueeze(0).unsqueeze(-1).unsqueeze(-1))+ torch.reshape(torch.transpose(sigma*torch.reshape(torch.randn(num_samples,batch_size)*  torch.sqrt(tau),(1,num_samples*batch_size)),0,1),(num_samples,batch_size,2,1))
+        v_temp += ( torch.transpose(X,2,3)@ (C @X)+torch.transpose(a,2,3) @ (D @ a)) *(tau.unsqueeze(0).unsqueeze(-1).unsqueeze(-1))
+        X = X_new
+    v_temp += torch.transpose(X,2,3)@ (R @X)
+    MC_results = torch.mean(v_temp, dim=0)
+    errors.append(mse(MC_results, v_true))
+end = time.time()
+```
+This code is related to Exercise 1.2 of the Optimal Control course. The objective is to investigate the effect of the number of time steps and the number of Monte Carlo samples on the error between the simulated value function and the optimal value function.
 
+The code imports the time module and defines a function mse(x, y) that computes the mean squared error between tensors x and y.
+
+**Usage**
+
+- Initializes a list `num_samples_list` with the different number of Monte Carlo samples to be used in the simulation.
+- Sets the variable `N` to 5000, `batch_size` to 50, x to a 3D tensor of size `(batch_size,1,2)` with random values, and t to a 2D tensor of size (`batch_size`,) with random values.
+- Initializes an empty list `errors` to store the mean squared errors for each number of time steps. The function `result.value(t,x)` returns the optimal value function, which is stored in `v_true`.
+- Loops over each number of Monte Carlo samples in `num_samples_list`. For each value, it computes the end_time and creates a time grid using torch.linspace. It then computes the Riccati equation solution for each time in the time grid using the function `result.solve_riccati`.
+- Initializes the value function approximation by defining `X` as a 3D tensor of size `(num_samples, batch_size, 2, 1)` and `tau` as the time step size. Loops over each time step and updates the approximation using the explicit time discretization scheme given in Exercise 1.1. At each step, it computes the optimal control `a`, updates `X` using the approximation formula, and adds the corresponding value function approximation to `v_temp`.
+- Computes the mean value function approximation using `torch.mean` and stores the mean squared error between the approximation and the optimal value function in `errors`. The code also records the total time taken to run the simulation.
+
+**Result**
+
+The results of the simulation are stored in the `errors` list, which represents the mean squared errors for each number of Monte Carlo samples in `num_samples_list`. The total time taken to run the simulation is also recorded. 
+
+Finally, the code generates a plot of the error as a function of the number of Monte Carlo samples using matplotlib. The plot is displayed using the `show()` function.
 
 ## Part 2: Supervised learning, checking the NNs are good enough<a name="part-2-supervised-learning-checking-the-nns-are-good-enough"></a>
 In part 2, a neural network is defined as a parametric function that depends on an input, denoted as $x \in \mathbb{R}^d$, and parameters, denoted as $\theta \in \mathbb{R}^p$, taking values in $\mathbb{R}^{d'}$. We write this function as:
